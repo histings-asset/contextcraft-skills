@@ -4,25 +4,89 @@ set -euo pipefail
 script_dir="$(cd -P "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 repo="$(cd "$script_dir/.." && pwd)"
 target="${1:-all}"
+scope="user"
+selected_skill=""
 
-install_codex() {
-  local dest="${CODEX_HOME:-$HOME/.codex}/skills"
+usage() {
+  cat >&2 <<'EOF'
+Usage:
+  ./bin/install-local [codex|claude|all] [--skill <name>] [--scope user|project]
+  ./bin/install-local list
+
+Examples:
+  ./bin/install-local list
+  ./bin/install-local codex --skill task-contract
+  ./bin/install-local all --scope project
+EOF
+}
+
+shift || true
+while [[ "$#" -gt 0 ]]; do
+  case "$1" in
+    --skill)
+      [[ "${2:-}" ]] || { usage; exit 2; }
+      selected_skill="$2"
+      shift 2
+      ;;
+    --scope)
+      [[ "${2:-}" == "user" || "${2:-}" == "project" ]] || { usage; exit 2; }
+      scope="$2"
+      shift 2
+      ;;
+    -h|--help)
+      usage
+      exit 0
+      ;;
+    *)
+      usage
+      exit 2
+      ;;
+  esac
+done
+
+list_skills() {
+  for skill in "$repo"/skills/*; do
+    [[ -d "$skill" && -f "$skill/SKILL.md" ]] || continue
+    basename "$skill"
+  done
+}
+
+install_skills() {
+  local dest="$1"
+  local label="$2"
+  local installed_any=0
+
   mkdir -p "$dest"
   for skill in "$repo"/skills/*; do
     [[ -d "$skill" && -f "$skill/SKILL.md" ]] || continue
+    local name
+    name="$(basename "$skill")"
+    [[ -z "$selected_skill" || "$selected_skill" == "$name" ]] || continue
+    rm -rf "$dest/$name"
     cp -R "$skill" "$dest/"
+    installed_any=1
   done
-  echo "Installed Codex skills to $dest"
+  [[ "$installed_any" -eq 1 ]] || {
+    echo "No matching skills found for $label${selected_skill:+: $selected_skill}" >&2
+    exit 1
+  }
+  echo "Installed $label skills to $dest"
+}
+
+install_codex() {
+  if [[ "$scope" == "project" ]]; then
+    install_skills "$repo/.codex/skills" "Codex project"
+  else
+    install_skills "${CODEX_HOME:-$HOME/.codex}/skills" "Codex"
+  fi
 }
 
 install_claude() {
-  local dest="${CLAUDE_HOME:-$HOME/.claude}/skills"
-  mkdir -p "$dest"
-  for skill in "$repo"/skills/*; do
-    [[ -d "$skill" && -f "$skill/SKILL.md" ]] || continue
-    cp -R "$skill" "$dest/"
-  done
-  echo "Installed Claude skills to $dest"
+  if [[ "$scope" == "project" ]]; then
+    install_skills "$repo/.claude/skills" "Claude project"
+  else
+    install_skills "${CLAUDE_HOME:-$HOME/.claude}/skills" "Claude"
+  fi
 }
 
 case "$target" in
@@ -36,8 +100,14 @@ case "$target" in
     install_codex
     install_claude
     ;;
+  list)
+    list_skills
+    ;;
+  -h|--help)
+    usage
+    ;;
   *)
-    echo "Usage: $0 [codex|claude|all]" >&2
+    usage
     exit 2
     ;;
 esac

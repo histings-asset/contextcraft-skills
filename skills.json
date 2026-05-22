@@ -1,0 +1,27 @@
+{
+  "name": "contextcraft-skills",
+  "description": "Reusable collaboration skills for Codex, Claude Code, and adjacent coding agents.",
+  "skills": [
+    {
+      "name": "collaboration-loop",
+      "path": "skills/collaboration-loop",
+      "category": "workflow",
+      "tags": ["collaboration", "retrospective", "pr-delivery"],
+      "description": "Build a closed-loop AI collaboration workflow across task intake, repo instructions, delivery reports, and retrospectives."
+    },
+    {
+      "name": "repo-agent-map",
+      "path": "skills/repo-agent-map",
+      "category": "repo-instructions",
+      "tags": ["agents-md", "claude-md", "cursor-rules"],
+      "description": "Create or audit short, true, executable repository instructions from real repository evidence."
+    },
+    {
+      "name": "task-contract",
+      "path": "skills/task-contract",
+      "category": "task-intake",
+      "tags": ["scope", "acceptance-criteria", "risk-boundaries"],
+      "description": "Turn ambiguous coding, product, writing, cleanup, refactor, debugging, or implementation requests into executable task contracts."
+    }
+  ]
+}

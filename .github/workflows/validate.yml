@@ -1,0 +1,44 @@
+name: Validate
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+
+jobs:
+  unix:
+    name: Validate on Ubuntu
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate structure
+        run: ./bin/validate
+      - name: Smoke test Bash installer
+        run: |
+          tmp="$(mktemp -d)"
+          CODEX_HOME="$tmp/codex" CLAUDE_HOME="$tmp/claude" ./bin/install-local all --skill task-contract
+          test -f "$tmp/codex/skills/task-contract/SKILL.md"
+          test -f "$tmp/claude/skills/task-contract/SKILL.md"
+          rm -rf "$tmp"
+
+  windows:
+    name: Validate on Windows
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: List skills
+        shell: pwsh
+        run: .\bin\install-local.ps1 list
+      - name: Smoke test PowerShell installer
+        shell: pwsh
+        run: |
+          $root = Join-Path $env:RUNNER_TEMP ([guid]::NewGuid().ToString())
+          $env:CODEX_HOME = Join-Path $root "codex"
+          $env:CLAUDE_HOME = Join-Path $root "claude"
+          New-Item -ItemType Directory -Force -Path (Join-Path $env:CODEX_HOME "skills\task-contract") | Out-Null
+          Set-Content -Path (Join-Path $env:CODEX_HOME "skills\task-contract\OLD.txt") -Value "old"
+          .\bin\install-local.ps1 all -SkillName task-contract
+          if (-not (Test-Path (Join-Path $env:CODEX_HOME "skills\task-contract\SKILL.md"))) { throw "Codex skill missing" }
+          if (-not (Test-Path (Join-Path $env:CLAUDE_HOME "skills\task-contract\SKILL.md"))) { throw "Claude skill missing" }
+          if (Test-Path (Join-Path $env:CODEX_HOME "skills\task-contract\OLD.txt")) { throw "Stale file was not removed" }

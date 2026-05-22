@@ -1,0 +1,76 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+script_dir="$(cd -P "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+repo="$(cd "$script_dir/.." && pwd)"
+
+fail() {
+  echo "validate: $*" >&2
+  exit 1
+}
+
+bash -n "$repo/bin/install-local"
+
+[[ -f "$repo/bin/install-local.ps1" ]] || fail "bin/install-local.ps1 is missing"
+[[ -f "$repo/skills.json" ]] || fail "skills.json is missing"
+
+if command -v pwsh >/dev/null 2>&1; then
+  pwsh -NoProfile -Command "\$null = [scriptblock]::Create((Get-Content -Raw '$repo/bin/install-local.ps1'))" \
+    || fail "bin/install-local.ps1 has invalid PowerShell syntax"
+fi
+
+found=0
+skill_names=""
+for skill in "$repo"/skills/*; do
+  [[ -d "$skill" ]] || continue
+  found=1
+
+  name="$(basename "$skill")"
+  skill_names="$skill_names $name"
+  skill_md="$skill/SKILL.md"
+  [[ -f "$skill_md" ]] || fail "$name is missing SKILL.md"
+
+  frontmatter_name="$(sed -n 's/^name: *//p' "$skill_md" | head -1)"
+  [[ "$frontmatter_name" == "$name" ]] || fail "$name SKILL.md name must match folder name"
+  grep -Eq '^description: .+' "$skill_md" || fail "$name SKILL.md is missing description"
+  description="$(sed -n 's/^description: *//p' "$skill_md" | head -1)"
+  [[ "${#description}" -ge 40 ]] || fail "$name SKILL.md description is too short"
+  [[ "${#description}" -le 1024 ]] || fail "$name SKILL.md description is too long"
+  grep -q "\"name\": \"$name\"" "$repo/skills.json" || fail "skills.json is missing $name"
+  grep -q "\"path\": \"skills/$name\"" "$repo/skills.json" || fail "skills.json has no path for $name"
+  grep -q "| \`$name\` |" "$repo/README.md" || fail "README.md skill table is missing $name"
+  grep -q "| \`$name\` |" "$repo/README.zh-CN.md" || fail "README.zh-CN.md skill table is missing $name"
+
+  references_dir="$skill/references"
+  if [[ -d "$references_dir" ]]; then
+    while IFS= read -r reference; do
+      [[ -f "$reference" ]] || fail "$name has invalid reference path: $reference"
+    done < <(find "$references_dir" -type f | sort)
+  fi
+
+  while IFS= read -r reference_path; do
+    [[ -f "$skill/$reference_path" ]] || fail "$name references missing file: $reference_path"
+  done < <(grep -Eo 'references/[A-Za-z0-9._/-]+' "$skill_md" | sort -u || true)
+done
+
+[[ "$found" -eq 1 ]] || fail "no skills found"
+
+while IFS= read -r catalog_name; do
+  [[ -d "$repo/skills/$catalog_name" ]] || fail "skills.json references missing skill: $catalog_name"
+done < <(sed -n 's/.*"name": "\([^"]*\)".*/\1/p' "$repo/skills.json" | grep -v '^contextcraft-skills$')
+
+if command -v rg >/dev/null 2>&1; then
+  rg -n '(/Users/histings|histings|API_KEY|TOKEN|PASSWORD|SECRET)' "$repo" \
+    -g '!/.git/**' \
+    -g '!/bin/validate' \
+    -g '!LICENSE' \
+    -g '!README.md' \
+    -g '!README.zh-CN.md' \
+    >/tmp/contextcraft-sensitive-scan.txt || true
+  [[ ! -s /tmp/contextcraft-sensitive-scan.txt ]] || {
+    cat /tmp/contextcraft-sensitive-scan.txt >&2
+    fail "possible private path or secret-like text found"
+  }
+fi
+
+echo "Validation passed"
