@@ -1,4 +1,4 @@
-# Agent Collaboration Skills
+# ContextCraft Skills
 
 一组帮助人更好使用 Codex、Claude Code 和其他 coding agent 的协作技能。
 
